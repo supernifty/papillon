@@ -1,6 +1,15 @@
 
 # Papillon
 
+## Installation
+This software requires Python3.
+
+```
+python -m venv papillon-env
+source ./papillon-env/bin/activate
+pip install -r requirements.txt
+```
+
 ## Usage
 
 ```
