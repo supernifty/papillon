@@ -8,6 +8,7 @@ import collections
 import logging
 import sys
 
+import intervaltree
 import numpy as np
 import pysam
 import matplotlib as mpl
@@ -16,9 +17,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 FIGSIZE_FACTOR_X=3.0
-FIGSIZE_FACTOR_Y=1.0
+FIGSIZE_FACTOR_X_MIN=0
 
-def main(bams, bed, genes_list, plot):
+FIGSIZE_FACTOR_Y=1.5
+
+def main(bams, bed, genes_list, plot, capture):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -27,6 +30,21 @@ def main(bams, bed, genes_list, plot):
   else:
     genes = None
 
+  captures = {}
+  if capture is not None:
+    capture_line = 0
+    logging.info('processing %s...', capture)
+    for capture_line, line in enumerate(open(capture, 'r')):
+      if line.startswith('#'):
+        continue
+      fields = line.strip('\n').split('\t')
+      if len(fields) < 3:
+        continue
+      if fields[0] not in captures:
+        captures[fields[0]] = intervaltree.IntervalTree()
+      captures[fields[0]][int(fields[1]):int(fields[2])] = True
+    logging.info('%i capture lines processed', capture_line)  
+
   regions = collections.defaultdict(set)
   logging.info('processing %s...', bed)
   lines = 0
@@ -34,7 +52,15 @@ def main(bams, bed, genes_list, plot):
     if line.startswith('#'):
       continue
     fields = line.strip('\n').split('\t')
-    regions[fields[3]].add((fields[0], int(fields[1]), int(fields[2])))
+    if capture is not None and fields[0] in captures:
+      intersections = captures[fields[0]][int(fields[1]):int(fields[2])]
+      total = 0
+      for interval in intersections:
+        total += min(interval.end, int(fields[2])) - max(interval.begin, int(fields[1]))
+      overlap = '\n{:.0f}%'.format(100. * total / (int(fields[2]) - int(fields[1])))
+    else:
+      overlap = ''
+    regions[fields[3]].add((fields[0], int(fields[1]), int(fields[2]), overlap))
   logging.info('processing %s: done %i lines found %i genes', bed, lines, len(regions))
 
   if plot is not None:
@@ -44,10 +70,10 @@ def main(bams, bed, genes_list, plot):
 
   sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\n')
   
-  xticklabels = collections.defaultdict(list)
+  xticklabels = collections.defaultdict(list) # genes to list of exons
   yticklabels = []
   for bam_idx, bam in enumerate(bams):
-    logging.info('processing %s', bam)
+    logging.info('processing file %i of %i: %s...', bam_idx + 1, len(bams), bam)
     samfile = pysam.AlignmentFile(bam, "rb" )
     sample_name = bam.split('/')[-1].split('.')[0]
     yticklabels.append(sample_name)
@@ -55,7 +81,7 @@ def main(bams, bed, genes_list, plot):
       if genes is None or gene in genes:
         for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region
           if bam_idx == 0:
-            xticklabels[gene].append(region[1])
+            xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
           pileups = [x.n for x in samfile.pileup(region[0], region[1], region[2]) if region[1] <= x.pos < region[2]]
           logging.debug(pileups)
           if len(pileups) < (region[2] - region[1]):
@@ -65,10 +91,11 @@ def main(bams, bed, genes_list, plot):
             median = (sorted_pileups[int(len(pileups) / 2)] + sorted_pileups[int(len(pileups) / 2) - 1]) / 2
           else:
             median = sorted_pileups[int(len(pileups) / 2)]
+          mean = sum(pileups) / len(pileups)
           sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\n'.format(bam, region[0], region[1], region[2], gene, sum(pileups) / len(pileups), median, min(pileups), max(pileups)))
           if plot is not None:
-            gene_result[gene][bam_idx, region_idx] = int(median)
-      if gene_count % 100 == 0:
+            gene_result[gene][bam_idx, region_idx] = int(mean)
+      if gene_count % 1000 == 0:
         logging.info('%i genes processed', gene_count)
 
   if plot is not None:
@@ -77,8 +104,11 @@ def main(bams, bed, genes_list, plot):
       if genes is None or gene in genes:
         target_image = '{}.{}.png'.format(plot, gene)
         logging.info('plotting %s with %i x %i...', target_image, gene_result[gene].shape[1], gene_result[gene].shape[0])
-        fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 10), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
-        heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="coolwarm_r", vmin=0)
+        fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 8, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 8), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
+        ax.set_title('Coverage plot for {}'.format(gene))
+        heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
+        ax.set_xlabel('Regions')
+        ax.set_ylabel('Samples')
         fig = heatmap.get_figure()
         fig.savefig(target_image)
 
@@ -89,6 +119,7 @@ if __name__ == '__main__':
   parser.add_argument('--bams', required=True, nargs='+', help='bams to analyse')
   parser.add_argument('--genes', required=False, nargs='*', help='genes to filter on')
   parser.add_argument('--bed', required=True, help='regions of interest')
+  parser.add_argument('--capture', required=False, help='capture to compare to')
   parser.add_argument('--plot', required=False, help='graph file prefix e.g. heatmap will generate heatmap.GENE.png')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
@@ -97,4 +128,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture)

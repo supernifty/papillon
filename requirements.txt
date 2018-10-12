@@ -2,3 +2,4 @@ pysam
 numpy
 matplotlib
 seaborn
+intervaltree
