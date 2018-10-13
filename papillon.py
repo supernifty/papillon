@@ -104,11 +104,11 @@ def main(bams, bed, genes_list, plot, capture):
       if genes is None or gene in genes:
         target_image = '{}.{}.png'.format(plot, gene)
         logging.info('plotting %s with %i x %i...', target_image, gene_result[gene].shape[1], gene_result[gene].shape[0])
-        fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 8, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 8), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
+        fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
         ax.set_title('Coverage plot for {}'.format(gene))
         heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
-        ax.set_xlabel('Regions')
-        ax.set_ylabel('Samples')
+        ax.set_xlabel('Regions') # TODO doesn't work
+        ax.set_ylabel('Samples') # TODO doesn't work
         fig = heatmap.get_figure()
         fig.savefig(target_image)
 
