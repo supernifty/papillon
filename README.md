@@ -1,5 +1,6 @@
 
 # Papillon
+![Papillon](assets/papillon.png)
 
 ## Installation
 This software requires Python3.
