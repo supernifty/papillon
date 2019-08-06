@@ -41,6 +41,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots):
 
   if genes_list is not None:
     genes = set(genes_list)
+    genes_list = sorted(genes_list)
     logging.info('limiting to %i genes', len(genes))
   else:
     genes = None
@@ -94,9 +95,9 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots):
     sample_name = bam.split('/')[-1].split('.')[0]
     yticklabels.append(sample_name)
     gene_count = 0
+    gene_pileups = collections.defaultdict(list)
     for gene_count, gene in enumerate(regions):
       if genes is None or gene in genes:
-        gene_pileup = []
         for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region in the gene
           if bam_idx == 0:
             xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
@@ -104,20 +105,22 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots):
           logging.debug(pileups)
           if len(pileups) < (region[2] - region[1]):
             pileups += [0] * (region[2] - region[1])
-          gene_pileup += pileups
+          gene_pileups[gene] += pileups
           sorted_pileups = sorted(pileups)
           median = statistic(sorted_pileups, 'median')
           mean = statistic(sorted_pileups, 'mean')
           sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\n'.format(bam, region[0], region[1], region[2], gene, mean, median, min(pileups), max(pileups)))
           if plot is not None:
             gene_result[gene][bam_idx, region_idx] = statistic(sorted_pileups, stat)
-        # now deal with gene pileup
-        gene_pileup = sorted(gene_pileup)
-        combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat)
-
       if gene_count % 1000 == 0:
         logging.info('%i genes processed', gene_count)
     logging.info('%i genes processed', gene_count)
+
+    # now deal with gene pileup
+    for gene in gene_pileups:
+      gene_pileup = sorted(gene_pileups[gene])
+      combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat)
+      logging.debug('updated sample %i %s %s', bam_idx, sample_name, gene)
 
   if plot is not None:
     logging.info('plotting...')
@@ -141,7 +144,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots):
     logging.info('plotting %s with %i x %i...', target_image, combined_result.shape[1], combined_result.shape[0])
     fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * combined_result.shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * combined_result.shape[0] / 10)))
     ax.set_title('Coverage plot with {} region coverage'.format(stat))
-    heatmap = sns.heatmap(combined_result, xticklabels=genes, yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
+    heatmap = sns.heatmap(combined_result, xticklabels=genes_list, yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
     ax.set_xlabel('Regions') # TODO doesn't work
     ax.set_ylabel('Samples') # TODO doesn't work
     fig = heatmap.get_figure()
@@ -150,7 +153,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots):
   logging.info('done')
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser(description='Assess MSI')
+  parser = argparse.ArgumentParser(description='Measure coverage across exons and genes')
   parser.add_argument('--bams', required=True, nargs='+', help='bams to analyse')
   parser.add_argument('--genes', required=False, nargs='*', help='genes to filter on')
   parser.add_argument('--bed', required=True, help='regions of interest')
