@@ -36,7 +36,7 @@ def statistic(pileups, stat):
       median = pileups[int(len(pileups) / 2)]
     return int(median)
 
-def main(bams, bed, genes_list, plot, capture, stat):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -122,18 +122,19 @@ def main(bams, bed, genes_list, plot, capture, stat):
   if plot is not None:
     logging.info('plotting...')
 
-    # each gene individually
-    for gene in regions:
-      if genes is None or gene in genes:
-        target_image = '{}.{}.png'.format(plot, gene)
-        logging.info('plotting %s with %i x %i...', target_image, gene_result[gene].shape[1], gene_result[gene].shape[0])
-        fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
-        ax.set_title('Coverage plot for {} with {} region coverage'.format(gene, stat))
-        heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
-        ax.set_xlabel('Regions') # TODO doesn't work
-        ax.set_ylabel('Samples') # TODO doesn't work
-        fig = heatmap.get_figure()
-        fig.savefig(target_image)
+    if exon_plots:
+      # each gene individually
+      for gene in regions:
+        if genes is None or gene in genes:
+          target_image = '{}.{}.png'.format(plot, gene)
+          logging.info('plotting %s with %i x %i...', target_image, gene_result[gene].shape[1], gene_result[gene].shape[0])
+          fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
+          ax.set_title('Coverage plot for {} with {} region coverage'.format(gene, stat))
+          heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
+          ax.set_xlabel('Regions') # TODO doesn't work
+          ax.set_ylabel('Samples') # TODO doesn't work
+          fig = heatmap.get_figure()
+          fig.savefig(target_image)
 
     # all genes
     target_image = '{}.png'.format(plot)
@@ -156,6 +157,7 @@ if __name__ == '__main__':
   parser.add_argument('--stat', required=False, default='mean', choices=('mean', 'min', 'max', 'median'), help='capture to compare to')
   parser.add_argument('--capture', required=False, help='capture to compare to')
   parser.add_argument('--plot', required=False, help='graph file prefix e.g. heatmap will generate prefix.GENE.png')
+  parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -163,4 +165,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots)
