@@ -21,7 +21,7 @@ FIGSIZE_FACTOR_X_MIN=0
 
 FIGSIZE_FACTOR_Y=1.5
 
-def main(bams, bed, genes_list, plot, capture):
+def main(bams, bed, genes_list, plot, capture, stat):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -77,6 +77,7 @@ def main(bams, bed, genes_list, plot, capture):
     samfile = pysam.AlignmentFile(bam, "rb" )
     sample_name = bam.split('/')[-1].split('.')[0]
     yticklabels.append(sample_name)
+    gene_count = 0
     for gene_count, gene in enumerate(regions):
       if genes is None or gene in genes:
         for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region
@@ -92,11 +93,19 @@ def main(bams, bed, genes_list, plot, capture):
           else:
             median = sorted_pileups[int(len(pileups) / 2)]
           mean = sum(pileups) / len(pileups)
-          sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\n'.format(bam, region[0], region[1], region[2], gene, sum(pileups) / len(pileups), median, min(pileups), max(pileups)))
+          sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\n'.format(bam, region[0], region[1], region[2], gene, mean, median, min(pileups), max(pileups)))
           if plot is not None:
-            gene_result[gene][bam_idx, region_idx] = int(mean)
+            if stat == 'mean':
+              gene_result[gene][bam_idx, region_idx] = int(mean)
+            elif stat == 'min':
+              gene_result[gene][bam_idx, region_idx] = min(pileups)
+            elif stat == 'max':
+              gene_result[gene][bam_idx, region_idx] = max(pileups)
+            elif stat == 'median':
+              gene_result[gene][bam_idx, region_idx] = int(median)
       if gene_count % 1000 == 0:
         logging.info('%i genes processed', gene_count)
+    logging.info('%i genes processed', gene_count)
 
   if plot is not None:
     logging.info('plotting...')
@@ -105,7 +114,7 @@ def main(bams, bed, genes_list, plot, capture):
         target_image = '{}.{}.png'.format(plot, gene)
         logging.info('plotting %s with %i x %i...', target_image, gene_result[gene].shape[1], gene_result[gene].shape[0])
         fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * gene_result[gene].shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * gene_result[gene].shape[0] / 10)))
-        ax.set_title('Coverage plot for {}'.format(gene))
+        ax.set_title('Coverage plot for {} with {} region coverage'.format(gene, stat))
         heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
         ax.set_xlabel('Regions') # TODO doesn't work
         ax.set_ylabel('Samples') # TODO doesn't work
@@ -119,8 +128,9 @@ if __name__ == '__main__':
   parser.add_argument('--bams', required=True, nargs='+', help='bams to analyse')
   parser.add_argument('--genes', required=False, nargs='*', help='genes to filter on')
   parser.add_argument('--bed', required=True, help='regions of interest')
+  parser.add_argument('--stat', required=False, default='mean', choices=('mean', 'min', 'max', 'median'), help='capture to compare to')
   parser.add_argument('--capture', required=False, help='capture to compare to')
-  parser.add_argument('--plot', required=False, help='graph file prefix e.g. heatmap will generate heatmap.GENE.png')
+  parser.add_argument('--plot', required=False, help='graph file prefix e.g. heatmap will generate prefix.GENE.png')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -128,4 +138,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat)
