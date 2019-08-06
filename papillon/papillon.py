@@ -21,6 +21,21 @@ FIGSIZE_FACTOR_X_MIN=0
 
 FIGSIZE_FACTOR_Y=1.5
 
+def statistic(pileups, stat):
+  if stat == 'mean':
+    mean = sum(pileups) / len(pileups)
+    return int(mean)
+  elif stat == 'min':
+    return min(pileups)
+  elif stat == 'max':
+    return max(pileups)
+  elif stat == 'median':
+    if len(pileups) % 2 == 0:
+      median = (pileups[int(len(pileups) / 2)] + pileups[int(len(pileups) / 2) - 1]) / 2
+    else:
+      median = pileups[int(len(pileups) / 2)]
+    return int(median)
+
 def main(bams, bed, genes_list, plot, capture, stat):
   logging.info('starting...')
 
@@ -65,6 +80,7 @@ def main(bams, bed, genes_list, plot, capture, stat):
 
   if plot is not None:
     gene_result = {}
+    combined_result = np.zeros((len(bams), len(genes)), dtype=float)
     for gene in regions:
       gene_result[gene] = np.zeros((len(bams), len(regions[gene])), dtype=float)
 
@@ -80,35 +96,33 @@ def main(bams, bed, genes_list, plot, capture, stat):
     gene_count = 0
     for gene_count, gene in enumerate(regions):
       if genes is None or gene in genes:
-        for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region
+        gene_pileup = []
+        for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region in the gene
           if bam_idx == 0:
             xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
           pileups = [x.n for x in samfile.pileup(region[0], region[1], region[2]) if region[1] <= x.pos < region[2]]
           logging.debug(pileups)
           if len(pileups) < (region[2] - region[1]):
             pileups += [0] * (region[2] - region[1])
+          gene_pileup += pileups
           sorted_pileups = sorted(pileups)
-          if len(pileups) % 2 == 0:
-            median = (sorted_pileups[int(len(pileups) / 2)] + sorted_pileups[int(len(pileups) / 2) - 1]) / 2
-          else:
-            median = sorted_pileups[int(len(pileups) / 2)]
-          mean = sum(pileups) / len(pileups)
+          median = statistic(sorted_pileups, 'median')
+          mean = statistic(sorted_pileups, 'mean')
           sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\n'.format(bam, region[0], region[1], region[2], gene, mean, median, min(pileups), max(pileups)))
           if plot is not None:
-            if stat == 'mean':
-              gene_result[gene][bam_idx, region_idx] = int(mean)
-            elif stat == 'min':
-              gene_result[gene][bam_idx, region_idx] = min(pileups)
-            elif stat == 'max':
-              gene_result[gene][bam_idx, region_idx] = max(pileups)
-            elif stat == 'median':
-              gene_result[gene][bam_idx, region_idx] = int(median)
+            gene_result[gene][bam_idx, region_idx] = statistic(sorted_pileups, stat)
+        # now deal with gene pileup
+        gene_pileup = sorted(gene_pileup)
+        combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat)
+
       if gene_count % 1000 == 0:
         logging.info('%i genes processed', gene_count)
     logging.info('%i genes processed', gene_count)
 
   if plot is not None:
     logging.info('plotting...')
+
+    # each gene individually
     for gene in regions:
       if genes is None or gene in genes:
         target_image = '{}.{}.png'.format(plot, gene)
@@ -121,6 +135,17 @@ def main(bams, bed, genes_list, plot, capture, stat):
         fig = heatmap.get_figure()
         fig.savefig(target_image)
 
+    # all genes
+    target_image = '{}.png'.format(plot)
+    logging.info('plotting %s with %i x %i...', target_image, combined_result.shape[1], combined_result.shape[0])
+    fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * combined_result.shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * combined_result.shape[0] / 10)))
+    ax.set_title('Coverage plot with {} region coverage'.format(stat))
+    heatmap = sns.heatmap(combined_result, xticklabels=genes, yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
+    ax.set_xlabel('Regions') # TODO doesn't work
+    ax.set_ylabel('Samples') # TODO doesn't work
+    fig = heatmap.get_figure()
+    fig.savefig(target_image)
+ 
   logging.info('done')
 
 if __name__ == '__main__':
