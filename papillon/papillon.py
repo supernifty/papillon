@@ -126,10 +126,11 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     logging.info('%i genes processed', gene_count)
 
     # now deal with gene pileup
-    for gene in gene_pileups:
-      gene_pileup = sorted(gene_pileups[gene])
-      combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat, max_coverage)
-      logging.debug('updated sample %i %s %s', bam_idx, sample_name, gene)
+    if plot is not None:
+      for gene in gene_pileups:
+        gene_pileup = sorted(gene_pileups[gene])
+        combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat, max_coverage)
+        logging.debug('updated sample %i %s %s', bam_idx, sample_name, gene)
 
   if plot is not None:
     logging.info('plotting...')
