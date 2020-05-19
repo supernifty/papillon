@@ -21,7 +21,7 @@ FIGSIZE_FACTOR_X_MIN=0
 
 FIGSIZE_FACTOR_Y=1.5
 
-def statistic(pileups, stat, max_value=None):
+def statistic(pileups, stat, max_value=None, mapped=None):
   if stat == 'mean':
     mean = sum(pileups) / len(pileups)
     result = int(mean)
@@ -35,7 +35,8 @@ def statistic(pileups, stat, max_value=None):
     else:
       median = pileups[int(len(pileups) / 2)]
     result = int(median)
-
+  elif stat == 'percent':
+    result = sum(pileups) * 100 / mapped # TODO we don't consider read length
   if max_value is not None:
     return min(result, max_value)
   else:
@@ -93,10 +94,12 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     for gene in regions:
       gene_result[gene] = np.zeros((len(bams), len(regions[gene])), dtype=float)
 
-  sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\n')
+  sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\tPct\n')
   
   xticklabels = collections.defaultdict(list) # genes to list of exons
   yticklabels = []
+
+  # process each bam
   for bam_idx, bam in enumerate(bams):
     logging.info('processing file %i of %i: %s...', bam_idx + 1, len(bams), bam)
     samfile = pysam.AlignmentFile(bam, "rb" )
@@ -118,9 +121,10 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
           sorted_pileups = sorted(pileups)
           median = statistic(sorted_pileups, 'median')
           mean = statistic(sorted_pileups, 'mean')
-          sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\n'.format(bam, region[0], region[1], region[2], gene, mean, median, min(pileups), max(pileups)))
+          percent_of_mapped = statistic(pileups, 'percent', None, samfile.mapped)
+          sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\t{:.6f}\n'.format(bam, region[0], region[1], region[2], gene, mean, median, min(pileups), max(pileups), percent_of_mapped))
           if plot is not None:
-            gene_result[gene][bam_idx, region_idx] = statistic(sorted_pileups, stat, max_coverage)
+            gene_result[gene][bam_idx, region_idx] = statistic(sorted_pileups, stat, max_coverage, samfile.mapped)
       if gene_count % 1000 == 0:
         logging.info('%i genes processed', gene_count)
     logging.info('%i genes processed', gene_count)
@@ -129,7 +133,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     if plot is not None:
       for gene in gene_pileups:
         gene_pileup = sorted(gene_pileups[gene])
-        combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat, max_coverage)
+        combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat, max_coverage, samfile.mapped)
         logging.debug('updated sample %i %s %s', bam_idx, sample_name, gene)
 
   if plot is not None:
@@ -148,7 +152,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
           if max_coverage is not None:
             extra += 'Max coverage {}. '.format(max_coverage)
           ax.set_title('Coverage plot for {} with {} region coverage. {}'.format(gene, stat, extra))
-          heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
+          heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.1f', cmap="Spectral", vmin=0)
           ax.set_xlabel('Regions') # TODO doesn't work
           ax.set_ylabel('Samples') # TODO doesn't work
           fig = heatmap.get_figure()
@@ -159,7 +163,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     logging.info('plotting %s with %i x %i: %s %s...', target_image, combined_result.shape[1], combined_result.shape[0], genes_list, yticklabels)
     fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * combined_result.shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * combined_result.shape[0] / 10)))
     ax.set_title('Coverage plot with {} region coverage'.format(stat))
-    heatmap = sns.heatmap(combined_result, xticklabels=genes_list, yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="Spectral", vmin=0)
+    heatmap = sns.heatmap(combined_result, xticklabels=genes_list, yticklabels=yticklabels, annot=True, ax=ax, fmt='.1f', cmap="Spectral", vmin=0)
     ax.set_xlabel('Regions') # TODO doesn't work
     ax.set_ylabel('Samples') # TODO doesn't work
     fig = heatmap.get_figure()
@@ -172,7 +176,7 @@ if __name__ == '__main__':
   parser.add_argument('--bams', required=True, nargs='+', help='bams to analyse')
   parser.add_argument('--genes', required=False, nargs='*', help='genes to filter on')
   parser.add_argument('--bed', required=True, help='regions of interest')
-  parser.add_argument('--stat', required=False, default='mean', choices=('mean', 'min', 'max', 'median'), help='capture to compare to')
+  parser.add_argument('--stat', required=False, default='mean', choices=('mean', 'min', 'max', 'median', 'percent'), help='value to report on plot')
   parser.add_argument('--capture', required=False, help='capture to compare to')
   parser.add_argument('--plot', required=False, help='graph file prefix e.g. heatmap will generate prefix.GENE.png')
   parser.add_argument('--padding', required=False, default=0, type=int, help='padding to apply to bed')

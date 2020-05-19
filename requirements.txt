@@ -1,5 +1,6 @@
 pysam
 numpy
 matplotlib
+scipy
 seaborn
 intervaltree
