@@ -42,7 +42,7 @@ def statistic(pileups, stat, max_value=None, mapped=None):
   else:
     return result
 
-def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -50,7 +50,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     genes_list = sorted(genes_list)
     logging.info('limiting to %i genes', len(genes))
   else:
-    genes = None
+    genes = None # no limit
 
   captures = {}
   if capture is not None:
@@ -88,6 +88,11 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     regions[fields[3]].add((fields[0], bed_start, bed_finish, overlap))
   logging.info('processing %s: done %i lines found %i genes', bed, lines, len(regions))
 
+  # select all genes
+  if genes is None:
+    genes = set(regions.keys())
+    genes_list = sorted(list(genes))
+
   if plot is not None:
     gene_result = {}
     combined_result = np.zeros((len(bams), len(genes)), dtype=float)
@@ -108,12 +113,12 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     gene_count = 0
     gene_pileups = collections.defaultdict(list)
     for gene_count, gene in enumerate(regions):
-      if genes is None or gene in genes:
+      if gene in genes:
         for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region in the gene
           if bam_idx == 0:
             xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
           # note: pysam by default filters duplicates
-          pileups = [x.n for x in samfile.pileup(region[0], region[1], region[2]) if region[1] <= x.pos < region[2]]
+          pileups = [x.n for x in samfile.pileup(region[0], region[1], region[2], min_mapping_quality=min_mapq) if region[1] <= x.pos < region[2]]
           logging.debug(pileups)
           if len(pileups) < (region[2] - region[1]):
             pileups += [0] * (region[2] - region[1])
@@ -180,6 +185,7 @@ if __name__ == '__main__':
   parser.add_argument('--capture', required=False, help='capture to compare to')
   parser.add_argument('--plot', required=False, help='graph file prefix e.g. heatmap will generate prefix.GENE.png')
   parser.add_argument('--padding', required=False, default=0, type=int, help='padding to apply to bed')
+  parser.add_argument('--min_mapq', required=False, default=0, type=int, help='minimum allowable mapping quality for read')
   parser.add_argument('--max_coverage', required=False, default=None, type=int, help='do not report coverage above this on plots')
   parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
   parser.add_argument('--verbose', action='store_true', help='more logging')
@@ -189,4 +195,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq)
