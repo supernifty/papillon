@@ -48,7 +48,7 @@ def main(threshold):
   logging.info('done')
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser(description='Assess MSI')
+  parser = argparse.ArgumentParser(description='Outlier assessment')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   parser.add_argument('--significance_threshold', type=float, default=0.05, help='show with p-value below threshold')
   args = parser.parse_args()

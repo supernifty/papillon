@@ -42,7 +42,7 @@ def statistic(pileups, stat, max_value=None, mapped=None):
   else:
     return result
 
-def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -95,9 +95,11 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
 
   if plot is not None:
     gene_result = {}
+    gene_result_annot = {}
     combined_result = np.zeros((len(bams), len(genes)), dtype=float)
     for gene in regions:
       gene_result[gene] = np.zeros((len(bams), len(regions[gene])), dtype=float)
+      gene_result_annot[gene] = np.empty((len(bams), len(regions[gene])), dtype='S5')
 
   sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\tPct\n')
   
@@ -130,6 +132,12 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
           sys.stdout.write('{}\t{}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\t{:.6f}\n'.format(bam, region[0], region[1], region[2], gene, mean, median, min(pileups), max(pileups), percent_of_mapped))
           if plot is not None:
             gene_result[gene][bam_idx, region_idx] = statistic(sorted_pileups, stat, max_coverage, samfile.mapped)
+            if max_coverage is not None and gene_result[gene][bam_idx, region_idx] >= max_coverage:
+              gene_result_annot[gene][bam_idx, region_idx] = '{}+'.format(max_coverage)
+            elif min_coverage is not None and gene_result[gene][bam_idx, region_idx] >= min_coverage:
+              gene_result_annot[gene][bam_idx, region_idx] = ''
+            else:
+              gene_result_annot[gene][bam_idx, region_idx] = '{:.0f}'.format(gene_result[gene][bam_idx, region_idx])
       if gene_count % 1000 == 0:
         logging.info('%i genes processed', gene_count)
     logging.info('%i genes processed', gene_count)
@@ -157,7 +165,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
           if max_coverage is not None:
             extra += 'Max coverage {}. '.format(max_coverage)
           ax.set_title('Coverage plot for {} with {} region coverage. {}'.format(gene, stat, extra))
-          heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=True, ax=ax, fmt='.1f', cmap="Spectral", vmin=0)
+          heatmap = sns.heatmap(gene_result[gene], xticklabels=xticklabels[gene], yticklabels=yticklabels, annot=np.char.decode(gene_result_annot[gene]), ax=ax, cmap="RdYlGn", fmt='', vmin=0)
           ax.set_xlabel('Regions') # TODO doesn't work
           ax.set_ylabel('Samples') # TODO doesn't work
           fig = heatmap.get_figure()
@@ -168,7 +176,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     logging.info('plotting %s with %i x %i: %s %s...', target_image, combined_result.shape[1], combined_result.shape[0], genes_list, yticklabels)
     fig, ax = plt.subplots(figsize=(max(FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * 6, FIGSIZE_FACTOR_X_MIN + FIGSIZE_FACTOR_X * combined_result.shape[1] / 4), max(FIGSIZE_FACTOR_Y * 8, FIGSIZE_FACTOR_Y * combined_result.shape[0] / 10)))
     ax.set_title('Coverage plot with {} region coverage'.format(stat))
-    heatmap = sns.heatmap(combined_result, xticklabels=genes_list, yticklabels=yticklabels, annot=True, ax=ax, fmt='.1f', cmap="Spectral", vmin=0)
+    heatmap = sns.heatmap(combined_result, xticklabels=genes_list, yticklabels=yticklabels, annot=True, ax=ax, fmt='.0f', cmap="RdYlGn", vmin=0)
     ax.set_xlabel('Regions') # TODO doesn't work
     ax.set_ylabel('Samples') # TODO doesn't work
     fig = heatmap.get_figure()
@@ -187,6 +195,7 @@ if __name__ == '__main__':
   parser.add_argument('--padding', required=False, default=0, type=int, help='padding to apply to bed')
   parser.add_argument('--min_mapq', required=False, default=0, type=int, help='minimum allowable mapping quality for read')
   parser.add_argument('--max_coverage', required=False, default=None, type=int, help='do not report coverage above this on plots')
+  parser.add_argument('--min_coverage', required=False, default=None, type=int, help='leave empty value if above this')
   parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
@@ -195,4 +204,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage)
