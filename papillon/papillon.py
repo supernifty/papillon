@@ -24,7 +24,7 @@ FIGSIZE_FACTOR_Y=1.5
 def statistic(pileups, stat, max_value=None, mapped=None):
   if stat == 'mean':
     mean = sum(pileups) / len(pileups)
-    result = int(mean)
+    result = mean
   elif stat == 'min':
     result = min(pileups)
   elif stat == 'max':
@@ -34,15 +34,18 @@ def statistic(pileups, stat, max_value=None, mapped=None):
       median = (pileups[int(len(pileups) / 2)] + pileups[int(len(pileups) / 2) - 1]) / 2
     else:
       median = pileups[int(len(pileups) / 2)]
-    result = int(median)
+    result = median
   elif stat == 'percent':
     result = sum(pileups) * 100 / mapped # TODO we don't consider read length
+  elif stat == 'sd':
+    result = np.std(pileups, ddof=1)
+
   if max_value is not None:
     return min(result, max_value)
   else:
     return result
 
-def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -85,6 +88,8 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
         total += min(interval.end, bed_finish) - max(interval.begin, bed_start)
     else:
       overlap = ''
+    if len(fields) < 4:
+      fields.append('none')
     regions[fields[3]].add((fields[0], bed_start, bed_finish, overlap))
   logging.info('processing %s: done %i lines found %i genes', bed, lines, len(regions))
 
@@ -101,12 +106,18 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
       gene_result[gene] = np.zeros((len(bams), len(regions[gene])), dtype=float)
       gene_result_annot[gene] = np.empty((len(bams), len(regions[gene])), dtype='S5')
 
+  if base_level is not None:
+    bases = collections.defaultdict(list)
+    base_fh = open(base_level, 'w')
+    base_fh.write('Chr\tPos\tn\tMean\tMedian\tMin\tMax\tSD\tpct2_5\tpct97_5\n')
+
   sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\tPct\n')
   
   xticklabels = collections.defaultdict(list) # genes to list of exons
   yticklabels = []
 
   # process each bam
+  bam_idx = 0
   for bam_idx, bam in enumerate(bams):
     logging.info('processing file %i of %i: %s...', bam_idx + 1, len(bams), bam)
     samfile = pysam.AlignmentFile(bam, "rb" )
@@ -118,13 +129,17 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
       if gene in genes:
         for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region in the gene
           if bam_idx == 0:
-            xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
+            if plot is not None:
+              xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
           # note: pysam by default filters duplicates
           pileups = [x.n for x in samfile.pileup(region[0], region[1], region[2], min_mapping_quality=min_mapq) if region[1] <= x.pos < region[2]]
           logging.debug(pileups)
           if len(pileups) < (region[2] - region[1]):
             pileups += [0] * (region[2] - region[1])
           gene_pileups[gene] += pileups
+          if base_level is not None:
+            for i, r in enumerate(range(region[1], region[2])):
+              bases[(region[0], r)].append(pileups[i])
           sorted_pileups = sorted(pileups)
           median = statistic(sorted_pileups, 'median')
           mean = statistic(sorted_pileups, 'mean')
@@ -148,6 +163,19 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
         gene_pileup = sorted(gene_pileups[gene])
         combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat, max_coverage, samfile.mapped)
         logging.debug('updated sample %i %s %s', bam_idx, sample_name, gene)
+
+  if base_level is not None:
+    for pos in bases:
+      base_fh.write('{}\t{}\t{}\t{:.1f}\t{}\t{}\t{}\t{:.1f}\t{:.1f}\t{:.1f}\n'.format(pos[0], pos[1], len(bases[pos]), statistic(bases[pos], 'mean'), statistic(bases[pos], 'median'), statistic(bases[pos], 'min'), statistic(bases[pos], 'max'), statistic(bases[pos], 'sd'), np.percentile(bases[pos], 2.5), np.percentile(bases[pos], 97.5)))
+
+  if sample_level is not None:
+    logging.info('writing to %s...', sample_level)
+    base_len = len(bases)
+    with open(sample_level, 'w') as sl_fh:
+      sl_fh.write('Sample\tBases\tMean\n')
+      for i in range(0, bam_idx):
+        total = sum([bases[x][i] for x in bases])
+        sl_fh.write('{}\t{}\t{:.2f}\n'.format(bams[i], base_len, total / base_len))
 
   if plot is not None:
     logging.info('plotting...')
@@ -197,6 +225,8 @@ if __name__ == '__main__':
   parser.add_argument('--max_coverage', required=False, default=None, type=int, help='do not report coverage above this on plots')
   parser.add_argument('--min_coverage', required=False, default=None, type=int, help='leave empty value if above this')
   parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
+  parser.add_argument('--base_level', required=False, help='filename for base level coverage')
+  parser.add_argument('--sample_level', required=False, help='filename for sample level coverage')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -204,4 +234,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level)
