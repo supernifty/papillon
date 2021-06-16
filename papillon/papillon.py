@@ -45,7 +45,7 @@ def statistic(pileups, stat, max_value=None, mapped=None):
   else:
     return result
 
-def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level, raw):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -111,6 +111,10 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     base_fh = open(base_level, 'w')
     base_fh.write('Chr\tPos\tn\tMean\tMedian\tMin\tMax\tSD\tpct2_5\tpct97_5\n')
 
+  if raw is not None:
+    raw_fh = open(raw, 'w')
+    raw_fh.write('Sample\tChr\tPos\tDepth\n')
+
   sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\tPct\n')
   
   xticklabels = collections.defaultdict(list) # genes to list of exons
@@ -137,9 +141,12 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
           if len(pileups) < (region[2] - region[1]):
             pileups += [0] * (region[2] - region[1])
           gene_pileups[gene] += pileups
-          if base_level is not None:
+          if base_level is not None or raw is not None:
             for i, r in enumerate(range(region[1], region[2])):
-              bases[(region[0], r)].append(pileups[i])
+              if base_level is not None:
+                bases[(region[0], r)].append(pileups[i])
+              if raw is not None:
+                raw_fh.write('{}\t{}\t{}\t{}\n'.format(bam, region[0], r, pileups[i]))
           sorted_pileups = sorted(pileups)
           median = statistic(sorted_pileups, 'median')
           mean = statistic(sorted_pileups, 'mean')
@@ -227,6 +234,7 @@ if __name__ == '__main__':
   parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
   parser.add_argument('--base_level', required=False, help='filename for base level coverage')
   parser.add_argument('--sample_level', required=False, help='filename for sample level coverage')
+  parser.add_argument('--raw', required=False, help='filename for individual base/sample coverage')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -234,4 +242,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level, args.raw)

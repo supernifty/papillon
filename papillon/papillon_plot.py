@@ -72,8 +72,8 @@ def main(target, title, highlight, dpi=300, width=12, height=8):
   ax.plot(data['x'], data['min'], '-', label='Min', color='brown')
   #ax.fill_between(x, y_est - y_err, y_est + y_err, alpha=0.2)
 
-  ax.set_xlabel('Position')
-  ax.set_ylabel('Depth')
+  ax.set_xlabel('Genomic position')
+  ax.set_ylabel('Sequencing depth (reads)')
   ax.legend()
   plt.tight_layout()
   fig.savefig(target, figsize=(width, height), dpi=dpi)
