@@ -26,7 +26,7 @@ def fmt_container(m):
       return ''
   return x_fmt
 
-def main(target, title, highlight, dpi=300, width=12, height=8):
+def main(target, title, highlight, dpi=300, width=12, height=8, xaxis=None, yaxis=None):
   logging.info('starting...')
 
   last_pos = None
@@ -72,8 +72,8 @@ def main(target, title, highlight, dpi=300, width=12, height=8):
   ax.plot(data['x'], data['min'], '-', label='Min', color='brown')
   #ax.fill_between(x, y_est - y_err, y_est + y_err, alpha=0.2)
 
-  ax.set_xlabel('Genomic position')
-  ax.set_ylabel('Sequencing depth (reads)')
+  ax.set_xlabel(xaxis or 'Genomic position')
+  ax.set_ylabel(yaxis or 'Sequencing depth (reads)')
   ax.legend()
   plt.tight_layout()
   fig.savefig(target, figsize=(width, height), dpi=dpi)
@@ -84,6 +84,8 @@ if __name__ == '__main__':
   parser.add_argument('--title', required=False, default='Coverage', help='title for plot')
   parser.add_argument('--target', required=False, default='plot.png', help='target file')
   parser.add_argument('--highlight', required=False, nargs='*', help='positions to highlight')
+  parser.add_argument('--xaxis', required=False, help='xaxis label')
+  parser.add_argument('--yaxis', required=False, help='yaxis label')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
   if args.verbose:
@@ -91,4 +93,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.target, args.title, args.highlight)
+  main(args.target, args.title, args.highlight, args.xaxis, args.yaxis)
