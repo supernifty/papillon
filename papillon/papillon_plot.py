@@ -93,4 +93,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.target, args.title, args.highlight, args.xaxis, args.yaxis)
+  main(args.target, args.title, args.highlight, xaxis=args.xaxis, yaxis=args.yaxis)
