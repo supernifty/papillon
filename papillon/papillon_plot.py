@@ -47,7 +47,7 @@ def main(target, title, highlight, dpi=300, width=12, height=8, xaxis=None, yaxi
     if last_pos is not None and int(row['Pos']) - last_pos > 1:
       ax.axvline(len(data['x']), alpha=0.1, color='#909090', lw=1)
       #exons[len(data['x'])] = last_pos # display on x-axis
-    elif row['Pos'] in highlight:
+    elif highlight is not None and row['Pos'] in highlight:
       ax.axvline(len(data['x']), alpha=0.5, color='#0000c0', lw=1)
       exons[len(data['x'])] = int(row['Pos'])
       #plt.text(len(data['x']) + 0.1, 0, row['Pos'], rotation=90)

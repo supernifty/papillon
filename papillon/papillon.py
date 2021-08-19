@@ -161,8 +161,8 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
             else:
               gene_result_annot[gene][bam_idx, region_idx] = '{:.0f}'.format(gene_result[gene][bam_idx, region_idx])
       if gene_count % 1000 == 0:
-        logging.info('%i genes processed', gene_count)
-    logging.info('%i genes processed', gene_count)
+        logging.debug('%i genes processed', gene_count + 1)
+    logging.info('%i genes processed', gene_count + 1)
 
     # now deal with gene pileup
     if plot is not None:
