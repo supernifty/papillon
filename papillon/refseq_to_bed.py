@@ -15,14 +15,14 @@ for line in sys.stdin:
   fields = line.strip('\n').split('\t')
   chr = fields[2]
   gene = fields[12]
-  cds_start = int(fields[6])
-  cds_end = int(fields[7])
+  cds_start = int(fields[6]) + 1
+  cds_end = int(fields[7]) + 1
   for start, end in zip(fields[9].split(','), fields[10].split(',')):
     if start == '' or end == '':
       continue
     if EXCLUDE_UTR:
-      start = max(int(start), cds_start)
-      end = min(int(end), cds_end)
+      start = max(int(start) + 1, cds_start)
+      end = min(int(end) + 1, cds_end)
       if start < end:
         sys.stdout.write('{}\t{}\t{}\t{}\n'.format(chr, start, end, gene))
     else:
