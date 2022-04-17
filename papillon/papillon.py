@@ -45,7 +45,7 @@ def statistic(pileups, stat, max_value=None, mapped=None):
   else:
     return result
 
-def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level, raw):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level, raw, sample_name_end):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -125,7 +125,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
   for bam_idx, bam in enumerate(bams):
     logging.info('processing file %i of %i: %s...', bam_idx + 1, len(bams), bam)
     samfile = pysam.AlignmentFile(bam, "rb" )
-    sample_name = bam.split('/')[-1].split('.')[0]
+    sample_name = bam.split('/')[-1].split(sample_name_end)[0]
     yticklabels.append(sample_name)
     gene_count = 0
     gene_pileups = collections.defaultdict(list)
@@ -180,7 +180,7 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     base_len = len(bases)
     with open(sample_level, 'w') as sl_fh:
       sl_fh.write('Sample\tBases\tMean\n')
-      for i in range(0, bam_idx):
+      for i in range(0, bam_idx + 1):
         total = sum([bases[x][i] for x in bases])
         sl_fh.write('{}\t{}\t{:.2f}\n'.format(bams[i], base_len, total / base_len))
 
@@ -234,6 +234,7 @@ if __name__ == '__main__':
   parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
   parser.add_argument('--base_level', required=False, help='filename for base level coverage')
   parser.add_argument('--sample_level', required=False, help='filename for sample level coverage')
+  parser.add_argument('--sample_name_end', required=False, default='.', help='string marking end of sample name')
   parser.add_argument('--raw', required=False, help='filename for individual base/sample coverage')
   parser.add_argument('--verbose', action='store_true', help='more logging')
   args = parser.parse_args()
@@ -242,4 +243,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level, args.raw)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level, args.raw, args.sample_name_end)
