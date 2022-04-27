@@ -6,6 +6,7 @@
 import argparse
 import collections
 import logging
+import os.path
 import sys
 
 import intervaltree
@@ -45,7 +46,7 @@ def statistic(pileups, stat, max_value=None, mapped=None):
   else:
     return result
 
-def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level, raw, sample_name_end):
+def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_coverage, min_mapq, min_coverage, base_level, sample_level, raw, sample_name_end, gene_level, exon_number, exon_number_reverse):
   logging.info('starting...')
 
   if genes_list is not None:
@@ -115,6 +116,10 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     raw_fh = open(raw, 'w')
     raw_fh.write('Sample\tChr\tPos\tDepth\n')
 
+  if gene_level is not None:
+    gene_fh = open(gene_level, 'w')
+    gene_fh.write('Sample\tGene\tMean\tMedian\tMin\tMax\tPct\n')
+
   sys.stdout.write('Sample\tChr\tStart\tEnd\tGene\tMean\tMedian\tMin\tMax\tPct\n')
   
   xticklabels = collections.defaultdict(list) # genes to list of exons
@@ -124,6 +129,9 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
   bam_idx = 0
   for bam_idx, bam in enumerate(bams):
     logging.info('processing file %i of %i: %s...', bam_idx + 1, len(bams), bam)
+    if not os.path.exists(bam):
+      logging.warn('skipping non-existent bam file: %s', bam)
+      continue
     samfile = pysam.AlignmentFile(bam, "rb" )
     sample_name = bam.split('/')[-1].split(sample_name_end)[0]
     yticklabels.append(sample_name)
@@ -134,7 +142,13 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
         for region_idx, region in enumerate(sorted(regions[gene], key=lambda x: x[1])): # each region in the gene
           if bam_idx == 0:
             if plot is not None:
-              xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
+              if exon_number:
+                if exon_number_reverse is not None and gene in exon_number_reverse:
+                  xticklabels[gene].append('Exon {}\n{}bp'.format(len(regions[gene]) - region_idx, region[2]-region[1]))
+                else:
+                  xticklabels[gene].append('Exon {}\n{}bp'.format(region_idx + 1, region[2]-region[1]))
+              else:
+                xticklabels[gene].append('{}\n{}bp{}'.format(region[1], region[2]-region[1], region[3]))
           # note: pysam by default filters duplicates
           pileups = [x.n for x in samfile.pileup(region[0], region[1], region[2], min_mapping_quality=min_mapq) if region[1] <= x.pos < region[2]]
           logging.debug(pileups)
@@ -165,10 +179,13 @@ def main(bams, bed, genes_list, plot, capture, stat, exon_plots, padding, max_co
     logging.info('%i genes processed', gene_count + 1)
 
     # now deal with gene pileup
-    if plot is not None:
+    if plot is not None or gene_level is not None:
       for gene in gene_pileups:
         gene_pileup = sorted(gene_pileups[gene])
         combined_result[bam_idx, genes_list.index(gene)] = statistic(gene_pileup, stat, max_coverage, samfile.mapped)
+        if gene_level is not None:
+          #gene_fh.write('Sample\tGene\tMean\tMedian\tMin\tMax\tPct\n')
+          gene_fh.write('{}\t{}\t{:.1f}\t{:.1f}\t{}\t{}\t{:.6f}\n'.format(sample_name, gene, statistic(gene_pileup, 'mean'), statistic(gene_pileup, 'median'), min(gene_pileup), max(gene_pileup), statistic(gene_pileup, 'percent', None, samfile.mapped)))
         logging.debug('updated sample %i %s %s', bam_idx, sample_name, gene)
 
   if base_level is not None:
@@ -232,8 +249,11 @@ if __name__ == '__main__':
   parser.add_argument('--max_coverage', required=False, default=None, type=int, help='do not report coverage above this on plots')
   parser.add_argument('--min_coverage', required=False, default=None, type=int, help='leave empty value if above this')
   parser.add_argument('--exon_plots', action='store_true', help='include exon plots')
+  parser.add_argument('--exon_number', action='store_true', help='on x-axis use exon number')
+  parser.add_argument('--exon_number_reverse', required=False, nargs='*', help='genes on reverse strand ')
   parser.add_argument('--base_level', required=False, help='filename for base level coverage')
   parser.add_argument('--sample_level', required=False, help='filename for sample level coverage')
+  parser.add_argument('--gene_level', required=False, help='filename for gene level coverage')
   parser.add_argument('--sample_name_end', required=False, default='.', help='string marking end of sample name')
   parser.add_argument('--raw', required=False, help='filename for individual base/sample coverage')
   parser.add_argument('--verbose', action='store_true', help='more logging')
@@ -243,4 +263,4 @@ if __name__ == '__main__':
   else:
     logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
-  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level, args.raw, args.sample_name_end)
+  main(args.bams, args.bed, args.genes, args.plot, args.capture, args.stat, args.exon_plots, args.padding, args.max_coverage, args.min_mapq, args.min_coverage, args.base_level, args.sample_level, args.raw, args.sample_name_end, args.gene_level, args.exon_number, args.exon_number_reverse)
