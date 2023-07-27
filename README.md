@@ -68,6 +68,21 @@ python summary.py --summary overall.tsv < heat.tsv > summary.tsv
 python outliers.py < heat.tsv > outliers.tsv
 ```
 
+### CNV detection
+
+Generate coverage tables:
+```
+python papillon.py --bed $BED --bams SAMPLE_sorted.bam > out/coverage.SAMPLE.tsv
+```
+
+Segment results:
+```
+python segment.py --segment_size 10000000 < out/coverage.SAMPLE.tsv > out/coverage.SAMPLE.segmented.tsv
+```
+
+
+
+
 ## Authors
 * Peter Georgeson
 * Romy Walker

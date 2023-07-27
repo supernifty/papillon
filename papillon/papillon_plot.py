@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 '''
   measure coverage across regions and bams
+  - takes base_level output as its input
 '''
 
 import argparse
@@ -66,10 +67,10 @@ def main(target, title, highlight, dpi=300, width=12, height=8, xaxis=None, yaxi
   ax.set_yscale('log')
   ax.set_title(title)
   plt.xticks(rotation=45, ha='right')
-  ax.plot(data['x'], data['max'], '-', label='Max', color='darkgreen')
+  ax.plot(data['x'], data['max'], '-', label='Max', color='darkgreen', linewidth=1)
   ax.fill_between(data['x'], data['sdl'], data['sdu'], alpha=0.2, label='95%')
   ax.plot(data['x'], data['mean'], '-', label='Mean')
-  ax.plot(data['x'], data['min'], '-', label='Min', color='brown')
+  ax.plot(data['x'], data['min'], '-', label='Min', color='brown', linewidth=1)
   #ax.fill_between(x, y_est - y_err, y_est + y_err, alpha=0.2)
 
   ax.set_xlabel(xaxis or 'Genomic position')
